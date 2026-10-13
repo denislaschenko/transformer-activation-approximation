@@ -1,0 +1,36 @@
+### created using AI ###
+
+# Python virtual environments
+.venv/
+venv/
+
+# Python-generated files
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Jupyter automatic checkpoints (keep your actual notebooks!)
+.ipynb_checkpoints/
+
+# Local editor settings
+.vscode/
+.idea/
+
+# Credentials and local environment variables
+.env
+.env.*
+!.env.example
+
+# Caches
+.cache/
+.pytest_cache/
+.ruff_cache/
+
+# Downloaded data and model weights — use these folders for them
+data/raw/
+checkpoints/
+model_cache/
+
+# Operating-system files
+.DS_Store
+Thumbs.db
