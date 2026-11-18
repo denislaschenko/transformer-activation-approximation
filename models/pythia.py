@@ -1,18 +1,3 @@
-"""Pythia-1B inference experiment: baseline vs activation/softmax replacement.
-
-Designed for the repository layout:
-    config.py
-    approximations/activations.py  (custom_activation(x))
-    approximations/softmax.py      (custom_softmax(x, dim))
-    models/pythia.py              (this file)
-
-Run from the repository root with:
-    python -m models.pythia
-
-This is an inference-only prototype, tested against the Transformers 5.19.0
-GPT-NeoX eager attention source, not against your local environment.
-"""
-
 import math
 
 import torch
@@ -68,15 +53,12 @@ def custom_attention_forward(
     """
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
-    # The registered eager_mask creates the causal mask (and any padding mask).
     if attention_mask is None:
         raise RuntimeError(
             "Missing causal attention mask! Check AttentionMaskInterface registration."
         )
     attn_weights = attn_weights + attention_mask
 
-    # GPT-NeoX's exact eager backend explicitly evaluates softmax in float32.
-    # Preserve this behavior for the initial equivalence/control experiment.
     attn_weights = SOFTMAX(attn_weights.to(torch.float32)).to(query.dtype)
 
     attn_weights = nn.functional.dropout(
@@ -89,13 +71,11 @@ def custom_attention_forward(
 
 
 def register_custom_attention() -> None:
-    """Register both attention calculation and its causal-mask formatter."""
     AttentionInterface.register(ATTENTION_NAME, custom_attention_forward)
     AttentionMaskInterface.register(ATTENTION_NAME, eager_mask)
 
 
 def load_test_tokens(tokenizer, max_tokens: int | None) -> torch.Tensor:
-    """Tokenize WikiText-2 RAW test split into one continuous token sequence."""
     test = load_dataset(
         "Salesforce/wikitext", "wikitext-2-raw-v1", split="test"
     )
@@ -116,7 +96,6 @@ def evaluate_perplexity(
     context_length: int,
     stride: int,
 ) -> dict[str, float | int]:
-    """Strided/sliding-window perplexity with properly masked overlap tokens."""
     if not (1 <= stride <= context_length):
         raise ValueError("Require 1 <= stride <= context_length.")
 
@@ -131,10 +110,8 @@ def evaluate_perplexity(
         new_tokens = end - prev_end
         batch = input_ids[:, begin:end].to(device)
         labels = batch.clone()
-        labels[:, :-new_tokens] = -100  # overlapping context is not scored again
+        labels[:, :-new_tokens] = -100
 
-        # Causal LM internally shifts labels left by one token. Count ONLY valid
-        # shifted targets, rather than subtracting one on every window.
         scored_tokens = int((labels[:, 1:] != -100).sum().item())
         if scored_tokens > 0:
             with torch.inference_mode():
@@ -169,7 +146,7 @@ def run_experiment(
     model = GPTNeoXForCausalLM.from_pretrained(
         CHECKPOINT,
         attn_implementation="eager",
-        dtype=torch.float32,  # stable exact-control comparison
+        dtype=torch.float32,
     ).to(device)
     model.eval()
 
@@ -178,7 +155,6 @@ def run_experiment(
         raise ValueError("stride exceeds the effective context length")
 
     tokens = load_test_tokens(tokenizer, max_tokens)
-    # Small fixed diagnostic sequence for comparing final token logits.
     diagnostic_ids = tokens[:, :min(64, tokens.shape[1])].to(device)
     with torch.inference_mode():
         baseline_diagnostic_logits = model(
